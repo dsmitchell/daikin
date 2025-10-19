@@ -147,17 +147,15 @@ struct ThermostatDetailView: View {
 			}
 		}
 		.navigationTitle("Associate Light")
-		.onAppear {
-			Task {
-				await viewModel.refreshHomes()
-				homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
-				if let (homeUUID, roomUUID, lightUUID) = viewModel.getAssociatedUUIDs(for: thermostat.id) {
-					selectedHome = viewModel.homes.first { $0.uniqueIdentifier == homeUUID }
-					selectedRoom = selectedHome?.rooms.first { $0.uniqueIdentifier == roomUUID }
-					selectedLight = selectedRoom?.accessories.first { $0.uniqueIdentifier == lightUUID }
-					rooms = selectedHome?.rooms ?? []
-					lights = selectedRoom?.accessories.filter { $0.isColorLight } ?? []
-				}
+		.task {
+			await viewModel.refreshHomes()
+			homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
+			if let (homeUUID, roomUUID, lightUUID) = viewModel.getAssociatedUUIDs(for: thermostat.id) {
+				selectedHome = viewModel.homes.first { $0.uniqueIdentifier.uuidString == homeUUID }
+				selectedRoom = selectedHome?.rooms.first { $0.uniqueIdentifier.uuidString == roomUUID }
+				selectedLight = selectedRoom?.accessories.first { $0.uniqueIdentifier.uuidString == lightUUID }
+				rooms = selectedHome?.rooms ?? []
+				lights = selectedRoom?.accessories.filter { $0.isColorLight } ?? []
 			}
 		}
 	}

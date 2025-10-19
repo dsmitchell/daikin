@@ -147,9 +147,8 @@ class DaikinViewModel: ObservableObject, Sendable {
 		return nil
 	}
 	
-	func getAssociatedUUIDs(for id: String) -> (homeUUID: UUID?, roomUUID: UUID?, lightUUID: UUID?)? {
-		guard let (homeUUIDStr, roomUUIDStr, lightUUIDStr) = associations[id] else { return nil }
-		return (UUID(uuidString: homeUUIDStr), UUID(uuidString: roomUUIDStr), UUID(uuidString: lightUUIDStr))
+	func getAssociatedUUIDs(for id: String) -> (homeUUID: String, roomUUID: String, lightUUID: String)? {
+		associations[id]
 	}
 	
 	func saveAssociation(for thermostatId: String, home: HMHome?, room: HMRoom?, light: HMAccessory?) {
@@ -159,7 +158,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 	}
 	
 	private func saveOriginalLightStates() async {
-		for (thermostatId, lightUUID) in associations.mapValues { $0.lightUUID } {
+		for (thermostatId, lightUUID) in associations.mapValues({ $0.lightUUID }) {
 			if let light = getAssociatedLight(for: thermostatId) {
 				guard let hueChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
 					  let saturationChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
