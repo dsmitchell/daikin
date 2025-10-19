@@ -6,11 +6,10 @@
 //
 
 import HomeKit
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct ContentView: View {
-	@Environment(\.modelContext) private var modelContext
 	@StateObject private var viewModel = DaikinViewModel()
 
 	var body: some View {
@@ -55,7 +54,9 @@ struct ContentView: View {
 				}
 			}
 			.onAppear {
-				viewModel.loadThermostats()
+				Task {
+					await viewModel.loadThermostats()
+				}
 			}
 		}
 	}
@@ -67,64 +68,96 @@ struct ThermostatDetailView: View {
 	@State private var selectedHome: HMHome?
 	@State private var selectedRoom: HMRoom?
 	@State private var selectedLight: HMAccessory?
-	@State private var homes: [HMHome] = []
 	@State private var rooms: [HMRoom] = []
 	@State private var lights: [HMAccessory] = []
+	@State private var homeKitError: String?
+	@State private var saveConfirmation: String?
 	
 	var body: some View {
 		Form {
 			Section(header: Text("HomeKit Association")) {
-				Picker("Home", selection: $selectedHome) {
-					Text("None").tag(HMHome?.none)
-					ForEach(homes, id: \.uniqueIdentifier) { home in
-						Text(home.name).tag(home as HMHome?)
+				if let error = homeKitError {
+					Text("HomeKit Error: \(error)")
+						.foregroundColor(.red)
+					Button("Retry HomeKit") {
+						Task {
+							await viewModel.refreshHomes()
+							homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
+						}
 					}
-				}
-				.onChange(of: selectedHome) { newHome in
-					rooms = newHome?.rooms ?? []
-					selectedRoom = nil
-					selectedLight = nil
-				}
-				
-				Picker("Room", selection: $selectedRoom) {
-					Text("None").tag(HMRoom?.none)
-					ForEach(rooms, id: \.uniqueIdentifier) { room in
-						Text(room.name).tag(room as HMRoom?)
+				} else if viewModel.homes.isEmpty {
+					Text("No homes available. Ensure Home app is set up and HomeKit access is granted.")
+						.foregroundColor(.red)
+					Button("Retry HomeKit") {
+						Task {
+							await viewModel.refreshHomes()
+							homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
+						}
 					}
-				}
-				.disabled(selectedHome == nil)
-				.onChange(of: selectedRoom) { newRoom in
-					lights = newRoom?.accessories.filter { $0.isColorLight } ?? []
-					selectedLight = nil
-				}
-				
-				Picker("Color Light", selection: $selectedLight) {
-					Text("None").tag(HMAccessory?.none)
-					ForEach(lights, id: \.uniqueIdentifier) { light in
-						Text(light.name).tag(light as HMAccessory?)
+				} else {
+					if let confirmation = saveConfirmation {
+						Text(confirmation)
+							.foregroundColor(.green)
+							.transition(.opacity)
+							.onAppear {
+								DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+									saveConfirmation = nil
+								}
+							}
 					}
-				}
-				.disabled(selectedRoom == nil)
-				
-				Button("Save Association") {
-					if let light = selectedLight {
-						viewModel.saveAssociation(for: thermostat.id, light: light)
+					
+					Picker("Home", selection: $selectedHome) {
+						Text("None").tag(HMHome?.none)
+						ForEach(viewModel.homes, id: \.uniqueIdentifier) { home in
+							Text(home.name).tag(home as HMHome?)
+						}
 					}
+					.onChange(of: selectedHome) { _, newHome in
+						rooms = newHome?.rooms ?? []
+						selectedRoom = nil
+						selectedLight = nil
+					}
+					
+					Picker("Room", selection: $selectedRoom) {
+						Text("None").tag(HMRoom?.none)
+						ForEach(rooms, id: \.uniqueIdentifier) { room in
+							Text(room.name).tag(room as HMRoom?)
+						}
+					}
+					.disabled(selectedHome == nil)
+					.onChange(of: selectedRoom) { _, newRoom in
+						lights = newRoom?.accessories.filter { $0.isColorLight } ?? []
+						selectedLight = nil
+					}
+					
+					Picker("Color Light", selection: $selectedLight) {
+						Text("None").tag(HMAccessory?.none)
+						ForEach(lights, id: \.uniqueIdentifier) { light in
+							Text(light.name).tag(light as HMAccessory?)
+						}
+					}
+					.disabled(selectedRoom == nil)
+					
+					Button("Save Association") {
+						viewModel.saveAssociation(for: thermostat.id, home: selectedHome, room: selectedRoom, light: selectedLight)
+						saveConfirmation = "Association saved successfully!"
+					}
+					.disabled(selectedLight == nil)
 				}
-				.disabled(selectedLight == nil)
 			}
 		}
 		.navigationTitle("Associate Light")
 		.onAppear {
-			viewModel.homeManager.requestAccess { success in
-				if success {
-					homes = viewModel.homeManager.homes
+			Task {
+				await viewModel.refreshHomes()
+				homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
+				if let (homeUUID, roomUUID, lightUUID) = viewModel.getAssociatedUUIDs(for: thermostat.id) {
+					selectedHome = viewModel.homes.first { $0.uniqueIdentifier == homeUUID }
+					selectedRoom = selectedHome?.rooms.first { $0.uniqueIdentifier == roomUUID }
+					selectedLight = selectedRoom?.accessories.first { $0.uniqueIdentifier == lightUUID }
+					rooms = selectedHome?.rooms ?? []
+					lights = selectedRoom?.accessories.filter { $0.isColorLight } ?? []
 				}
-			}
-			if let light = viewModel.getAssociatedLight(for: thermostat.id) {
-				selectedHome = light.room?.home
-				selectedRoom = light.room
-				selectedLight = light
 			}
 		}
 	}

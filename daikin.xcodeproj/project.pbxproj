@@ -151,7 +151,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHomeKitUsageDescription = "To stop your thermostat";
+				INFOPLIST_KEY_NSHomeKitUsageDescription = "Needs to access HomeKit status to pause and resume your Thermostat";
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -180,7 +181,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHomeKitUsageDescription = "To stop your thermostat";
+				INFOPLIST_KEY_NSHomeKitUsageDescription = "Needs to access HomeKit status to pause and resume your Thermostat";
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
