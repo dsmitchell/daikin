@@ -17,19 +17,31 @@ struct ContentView: View {
 			List {
 				Section(header: Text("Thermostats")) {
 					ForEach(viewModel.thermostats, id: \.id) { thermostat in
-						NavigationLink(destination: ThermostatDetailView(thermostat: thermostat, viewModel: viewModel)) {
-							VStack(alignment: .leading) {
-								Text(thermostat.name ?? "Unnamed Thermostat")
-								Text("Temperature: \(viewModel.getTemperature(for: thermostat.id))°C")
-									.font(.subheadline)
-								Text("Mode: \(viewModel.getMode(for: thermostat.id))")
-									.font(.subheadline)
-								Text("Active Status: \(viewModel.getActiveStatus(for: thermostat.id))")
-									.font(.subheadline)
-								Text("Fan Circulate: \(viewModel.getFanCirculate(for: thermostat.id))")
-									.font(.subheadline)
-								Text("Fan: \(viewModel.getFan(for: thermostat.id))")
-									.font(.subheadline)
+						VStack {
+							NavigationLink(destination: ThermostatDetailView(thermostat: thermostat, viewModel: viewModel)) {
+								VStack(alignment: .leading) {
+									Text(thermostat.name ?? "Unnamed Thermostat")
+									Text("Temperature: \(viewModel.getTemperature(for: thermostat.id))°C")
+										.font(.subheadline)
+									Text("Mode: \(viewModel.getMode(for: thermostat.id))")
+										.font(.subheadline)
+									Text("Active Status: \(viewModel.getActiveStatus(for: thermostat.id))")
+										.font(.subheadline)
+									Text("Fan Circulate: \(viewModel.getFanCirculate(for: thermostat.id))")
+										.font(.subheadline)
+									Text("Fan: \(viewModel.getFan(for: thermostat.id))")
+										.font(.subheadline)
+								}
+							}
+							Button("Test Mode Off") {
+								Task {
+									await viewModel.testSetModeOff(deviceId: thermostat.id)
+								}
+							}
+							Button("Test Fan Circulate On") {
+								Task {
+									await viewModel.testSetFanCirculate(deviceId: thermostat.id, circulate: true)
+								}
 							}
 						}
 					}
@@ -150,12 +162,14 @@ struct ThermostatDetailView: View {
 		.task {
 			await viewModel.refreshHomes()
 			homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
+		}
+		.onAppear {
 			if let (homeUUID, roomUUID, lightUUID) = viewModel.getAssociatedUUIDs(for: thermostat.id) {
 				selectedHome = viewModel.homes.first { $0.uniqueIdentifier.uuidString == homeUUID }
-				selectedRoom = selectedHome?.rooms.first { $0.uniqueIdentifier.uuidString == roomUUID }
-				selectedLight = selectedRoom?.accessories.first { $0.uniqueIdentifier.uuidString == lightUUID }
 				rooms = selectedHome?.rooms ?? []
+				selectedRoom = rooms.first { $0.uniqueIdentifier.uuidString == roomUUID }
 				lights = selectedRoom?.accessories.filter { $0.isColorLight } ?? []
+				selectedLight = lights.first { $0.uniqueIdentifier.uuidString == lightUUID }
 			}
 		}
 	}

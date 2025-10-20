@@ -2,7 +2,6 @@ import Foundation
 
 struct TokenResponse: Codable {
 	let accessToken: String
-	let accessTokenExpiresIn: Int
 }
 
 struct Device: Codable {
@@ -10,7 +9,7 @@ struct Device: Codable {
 	let name: String?
 }
 
-struct Location: Codable {
+struct DeviceResponse: Codable {
 	let devices: [Device]
 }
 
@@ -49,4 +48,8 @@ struct ModeRequest: Codable {
 struct FanRequest: Codable {
 	let fanCirculate: Int
 	let fanCirculateSpeed: Int
+}
+
+struct UpdateResponse: Codable {
+	let message: String
 }

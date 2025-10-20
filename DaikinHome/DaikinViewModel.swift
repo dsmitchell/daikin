@@ -44,6 +44,27 @@ class DaikinViewModel: ObservableObject, Sendable {
 			.store(in: &cancellables)
 	}
 	
+	// In DaikinViewModel.swift, add a test method
+	func testSetModeOff(deviceId: String) async {
+		guard let accessToken = accessToken else { return }
+		do {
+			let response = try await client.setModeOff(accessToken: accessToken, deviceId: deviceId)
+			print("testSetModeOff: \(response.message)")
+		} catch {
+			print("Test setModeOff failed: \(error)")
+		}
+	}
+
+	func testSetFanCirculate(deviceId: String, circulate: Bool) async {
+		guard let accessToken = accessToken else { return }
+		do {
+			let response = try await client.setFanCirculate(accessToken: accessToken, deviceId: deviceId, circulate: circulate)
+			print("testSetFanCirculate: \(response.message)")
+		} catch {
+			print("Test setFanCirculate failed: \(error)")
+		}
+	}
+	
 	func loadThermostats() async {
 		guard isConfigured else { return }
 		
@@ -79,7 +100,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 	}
 	
 	private func getAccessToken() async throws -> String {
-		try await client.getAccessToken(email: email, integratorToken: integratorToken).0
+		try await client.getAccessToken(email: email, integratorToken: integratorToken).accessToken
 	}
 	
 	private func getDevices() async throws -> [Device] {

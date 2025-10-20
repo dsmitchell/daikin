@@ -20,7 +20,7 @@ class DaikinClient {
 		return headers
 	}
 	
-	func getAccessToken(email: String, integratorToken: String) async throws -> (String, Int) {
+	func getAccessToken(email: String, integratorToken: String) async throws -> TokenResponse {
 		let url = URL(string: "\(baseURL)/v1/token")!
 		var request = URLRequest(url: url)
 		request.httpMethod = "POST"
@@ -35,10 +35,10 @@ class DaikinClient {
 		}
 		
 		let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-		return (tokenResponse.accessToken, tokenResponse.accessTokenExpiresIn)
+		return tokenResponse
 	}
 	
-	func getDevices(accessToken: String) async throws -> [Location] {
+	func getDevices(accessToken: String) async throws -> [DeviceResponse] {
 		let url = URL(string: "\(baseURL)/v1/devices")!
 		var request = URLRequest(url: url)
 		request.httpMethod = "GET"
@@ -49,7 +49,7 @@ class DaikinClient {
 			throw URLError(.badServerResponse)
 		}
 		
-		return try JSONDecoder().decode([Location].self, from: data)
+		return try JSONDecoder().decode([DeviceResponse].self, from: data)
 	}
 	
 	func getThermostatInfo(accessToken: String, deviceId: String) async throws -> DeviceInfo {
@@ -66,7 +66,7 @@ class DaikinClient {
 		return try JSONDecoder().decode(DeviceInfo.self, from: data)
 	}
 	
-	func setModeOff(accessToken: String, deviceId: String) async throws {
+	func setModeOff(accessToken: String, deviceId: String) async throws -> UpdateResponse {
 		let url = URL(string: "\(baseURL)/v1/devices/\(deviceId)/msp")!
 		var request = URLRequest(url: url)
 		request.httpMethod = "PUT"
@@ -79,22 +79,24 @@ class DaikinClient {
 		guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
 			throw URLError(.badServerResponse)
 		}
-		try await Task.sleep(nanoseconds: 15_000_000_000)
+		
+		return try JSONDecoder().decode(UpdateResponse.self, from: data)
 	}
 	
-	func setFanCirculate(accessToken: String, deviceId: String) async throws {
+	func setFanCirculate(accessToken: String, deviceId: String, circulate: Bool) async throws -> UpdateResponse {
 		let url = URL(string: "\(baseURL)/v1/devices/\(deviceId)/fan")!
 		var request = URLRequest(url: url)
 		request.httpMethod = "PUT"
 		request.allHTTPHeaderFields = getHeaders(accessToken: accessToken)
 		
-		let body = FanRequest(fanCirculate: 1, fanCirculateSpeed: 1)
+		let body = FanRequest(fanCirculate: circulate ? 1 : 0, fanCirculateSpeed: 1)
 		request.httpBody = try JSONEncoder().encode(body)
 		
 		let (data, response) = try await URLSession.shared.data(for: request)
 		guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
 			throw URLError(.badServerResponse)
 		}
-		try await Task.sleep(nanoseconds: 15_000_000_000)
+		
+		return try JSONDecoder().decode(UpdateResponse.self, from: data)
 	}
 }
