@@ -2,14 +2,19 @@ import Foundation
 
 struct TokenResponse: Codable {
 	let accessToken: String
+	let accessTokenExpiresIn: Int
+	let tokenType: String
 }
 
 struct Device: Codable {
 	let id: String
 	let name: String?
+	let model: String
+	let firmwareVersion: String
 }
 
-struct DeviceResponse: Codable {
+struct Location: Codable {
+	let locationName: String?
 	let devices: [Device]
 }
 

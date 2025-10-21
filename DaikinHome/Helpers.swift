@@ -14,12 +14,11 @@ func modeDescription(_ mode: Int) -> String {
 func equipmentStatusDescription(_ status: Int?) -> String {
 	guard let status = status else { return "Unknown (nil)" }
 	switch status {
-	case 0: return "Idle"
-	case 1: return "Heating Active?"
-	case 2: return "Cooling Active?"
-	case 3: return "Heating Active"
-	case 4: return "Fan Only (Circulate)"
-	case 5: return "Heating and Fan (preparing to heat?)"
+	case 1: return "Cooling"
+	case 2: return "Drying/Overcool"
+	case 3: return "Heating"
+	case 4: return "Fan Only"
+	case 5: return "Idle"
 	default: return "Unknown"
 	}
 }

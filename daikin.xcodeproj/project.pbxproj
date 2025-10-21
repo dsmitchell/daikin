@@ -15,9 +15,22 @@
 		2685896D2EA4286F00F739BF /* HomeKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HomeKit.framework; path = System/Library/Frameworks/HomeKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		260756002EA7098C00ADB6FA /* Exceptions for "DaikinHome" folder in "DaikinHome" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 268589562EA4258000F739BF /* DaikinHome */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		268589582EA4258000F739BF /* DaikinHome */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				260756002EA7098C00ADB6FA /* Exceptions for "DaikinHome" folder in "DaikinHome" target */,
+			);
 			path = DaikinHome;
 			sourceTree = "<group>";
 		};
@@ -151,6 +164,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DaikinHome/Info.plist;
 				INFOPLIST_KEY_NSHomeKitUsageDescription = "Needs to access HomeKit status to pause and resume your Thermostat";
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -181,6 +195,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DaikinHome/Info.plist;
 				INFOPLIST_KEY_NSHomeKitUsageDescription = "Needs to access HomeKit status to pause and resume your Thermostat";
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				LD_RUNPATH_SEARCH_PATHS = (

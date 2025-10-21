@@ -17,10 +17,10 @@ class DaikinViewModel: ObservableObject, Sendable {
 	@AppStorage("integratorToken") var integratorToken: String = ""
 	@AppStorage("associations") private var associationsData: Data = Data()
 	
-	@Published var thermostats: [Device] = []
+	@Published var locations: [Location] = []
 	@Published var isMonitoring = false
 	@Published var statuses: [String: DeviceInfo] = [:]
-	@Published var originalLightStates: [UUID: (hue: Float, saturation: Float, brightness: Float)] = [:]
+	@Published var originalLightStates: [UUID: (power: Bool, hue: Float, saturation: Float, brightness: Float)] = [:]
 	@Published var homes: [HMHome] = []
 	
 	private let homeKitManager = HomeKitManager()
@@ -45,13 +45,13 @@ class DaikinViewModel: ObservableObject, Sendable {
 	}
 	
 	// In DaikinViewModel.swift, add a test method
-	func testSetModeOff(deviceId: String) async {
+	func testSetMode(deviceId: String, mode: Int) async {
 		guard let accessToken = accessToken else { return }
 		do {
-			let response = try await client.setModeOff(accessToken: accessToken, deviceId: deviceId)
-			print("testSetModeOff: \(response.message)")
+			let response = try await client.setMode(mode: mode, accessToken: accessToken, deviceId: deviceId)
+			print("testSetMode: \(response.message)")
 		} catch {
-			print("Test setModeOff failed: \(error)")
+			print("Test setMode failed: \(error)")
 		}
 	}
 
@@ -70,8 +70,8 @@ class DaikinViewModel: ObservableObject, Sendable {
 		
 		do {
 			accessToken = try await getAccessToken()
-			let devices = try await getDevices()
-			thermostats = devices
+			locations = try await getLocations()
+			await updateStatuses()
 		} catch {
 			print("Error loading thermostats: \(error)")
 		}
@@ -103,42 +103,62 @@ class DaikinViewModel: ObservableObject, Sendable {
 		try await client.getAccessToken(email: email, integratorToken: integratorToken).accessToken
 	}
 	
-	private func getDevices() async throws -> [Device] {
-		try await client.getDevices(accessToken: accessToken ?? "").flatMap { $0.devices }
+	private func getLocations() async throws -> [Location] {
+		try await client.getLocations(accessToken: accessToken ?? "")
+	}
+	
+	func updateStatus(deviceId: String) async throws {
+		guard let accessToken = accessToken else { return }
+		print("Updating status for \(deviceId)...")
+		let info = try await client.getThermostatInfo(accessToken: accessToken, deviceId: deviceId)
+		await MainActor.run {
+			print("Completed status update for \(deviceId)")
+			self.statuses[deviceId] = info
+		}
 	}
 	
 	func updateStatuses() async {
-		guard let accessToken = accessToken else { return }
-		for thermostat in thermostats {
-			do {
-				let info = try await client.getThermostatInfo(accessToken: accessToken, deviceId: thermostat.id)
-				await MainActor.run {
-					self.statuses[thermostat.id] = info
+		for location in locations {
+			for thermostat in location.devices {
+				do {
+					try await updateStatus(deviceId: thermostat.id)
+				} catch {
+					print("Error updating status for \(thermostat.id): \(error)")
 				}
-			} catch {
-				print("Error updating status for \(thermostat.id): \(error)")
 			}
 		}
 	}
 	
 	func getTemperature(for id: String) -> String {
 		guard let info = statuses[id] else { return "N/A" }
-		return String(format: "%.1f", info.tempIndoor)
+		let heat = info.heatSetpoint != nil ? String(format: "%.1f", info.heatSetpoint!) : "not set"
+		let cool = info.coolSetpoint != nil ? String(format: "%.1f", info.coolSetpoint!) : "not set"
+		return "\(info.tempIndoor)°C (heat: \(heat), cool: \(cool))"
 	}
-	
-	func getMode(for id: String) -> String {
-		guard let info = statuses[id] else { return "N/A" }
-		return modeDescription(info.mode)
+
+	func getMode(for id: String) -> Int? {
+		guard let info = statuses[id] else { return nil }
+		return info.mode
+	}
+
+	func getModeDescription(for id: String) -> String {
+		guard let mode = getMode(for: id) else { return "N/A" }
+		return "\(modeDescription(mode)) (\(mode))"
 	}
 	
 	func getActiveStatus(for id: String) -> String {
 		guard let info = statuses[id] else { return "N/A" }
-		return equipmentStatusDescription(info.equipmentStatus)
+		return "\(equipmentStatusDescription(info.equipmentStatus)) (\(info.equipmentStatus ?? -1))"
 	}
 	
-	func getFanCirculate(for id: String) -> String {
-		guard let info = statuses[id] else { return "N/A" }
-		return fanCirculateDescription(info.fanCirculate)
+	func getFanCirculate(for id: String) -> Int? {
+		guard let info = statuses[id] else { return nil }
+		return info.fanCirculate
+	}
+
+	func getFanCirculateDescription(for id: String) -> String {
+		guard let fanCirculate = getFanCirculate(for: id) else { return "N/A" }
+		return "\(fanCirculateDescription(fanCirculate)) (\(fanCirculate))"
 	}
 	
 	func getFan(for id: String) -> String {
@@ -181,21 +201,24 @@ class DaikinViewModel: ObservableObject, Sendable {
 	private func saveOriginalLightStates() async {
 		for (thermostatId, lightUUID) in associations.mapValues({ $0.lightUUID }) {
 			if let light = getAssociatedLight(for: thermostatId) {
-				guard let hueChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
-					  let saturationChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
-					  let brightnessChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else { continue }
+				guard let powerChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypePowerState}),
+					  let hueChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
+					  let saturationChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
+					  let brightnessChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else { continue }
 				
 				do {
+					try await powerChar.readValue()
 					try await hueChar.readValue()
 					try await saturationChar.readValue()
 					try await brightnessChar.readValue()
 					
+					let power = powerChar.value as? Bool ?? false
 					let hue = hueChar.value as? Float ?? 0
 					let saturation = saturationChar.value as? Float ?? 0
 					let brightness = brightnessChar.value as? Float ?? 0
 					
 					await MainActor.run {
-						self.originalLightStates[UUID(uuidString: lightUUID)!] = (hue, saturation, brightness)
+						self.originalLightStates[UUID(uuidString: lightUUID)!] = (power, hue, saturation, brightness)
 					}
 				} catch {
 					print("Error reading light state for \(thermostatId): \(error)")
@@ -209,11 +232,13 @@ class DaikinViewModel: ObservableObject, Sendable {
 			for home in homes {
 				for accessory in home.accessories {
 					if accessory.uniqueIdentifier == lightUUID {
-						guard let hueChar = accessory.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
-							  let saturationChar = accessory.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
-							  let brightnessChar = accessory.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else { continue }
+						guard let powerChar = accessory.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypePowerState}),
+							  let hueChar = accessory.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
+							  let saturationChar = accessory.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
+							  let brightnessChar = accessory.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else { continue }
 						
 						do {
+							try await powerChar.writeValue(state.power)
 							try await hueChar.writeValue(state.hue)
 							try await saturationChar.writeValue(state.saturation)
 							try await brightnessChar.writeValue(state.brightness)
@@ -230,29 +255,61 @@ class DaikinViewModel: ObservableObject, Sendable {
 	}
 	
 	private func updateLights() async {
-		for thermostat in thermostats {
+		for thermostat in locations.flatMap( \.devices ) {
 			guard let info = statuses[thermostat.id], let light = getAssociatedLight(for: thermostat.id),
-				  let hueChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
-				  let saturationChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
-				  let brightnessChar = light.colorService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else { continue }
-			
-			let equipmentStatus = info.equipmentStatus ?? 0
-			let hue: Float
-			let saturation: Float = 100
-			let brightness: Float = 100
-			
-			if equipmentStatus == 1 || equipmentStatus == 3 || equipmentStatus == 5 {
-				hue = 0 // Red for heating
-			} else if equipmentStatus == 2 {
-				hue = 240 // Blue for cooling
-			} else {
+				  let powerChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypePowerState }),
+				  let hueChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
+				  let saturationChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
+				  let brightnessChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else {
+				print("No light association for \(thermostat.id)")
 				continue
 			}
 			
+			let equipmentStatus = info.equipmentStatus ?? 0
+			let power: Bool
+			let hue: Float
+			let saturation: Float
+			let brightness: Float
+			
+			if equipmentStatus == 0 || equipmentStatus > 5 {
+				if originalLightStates[light.uniqueIdentifier] == nil {
+					await saveOriginalLightStates()
+				}
+				power = true
+				hue = 300 // Magenta to notice unseen states to help identify their meaning
+				saturation = 100
+				brightness = 50
+			} else if equipmentStatus == 3 {
+				if originalLightStates[light.uniqueIdentifier] == nil {
+					await saveOriginalLightStates()
+				}
+				power = true
+				hue = 0 // Red for heating
+				saturation = 100
+				brightness = 50
+			} else if equipmentStatus == 1 || equipmentStatus == 2 {
+				if originalLightStates[light.uniqueIdentifier] == nil {
+					await saveOriginalLightStates()
+				}
+				power = true
+				hue = 240 // Blue for cooling / overcooling
+				saturation = 100
+				brightness = 50
+			} else if let original = originalLightStates[light.uniqueIdentifier] {
+				power = original.power
+				hue = original.hue
+				saturation = original.saturation
+				brightness = original.brightness
+			} else {
+				print("Cannot update light for \(thermostat.id)")
+				continue
+			}
+			print("Updating light for \(thermostat.id): \(power),\(hue),\(saturation),\(brightness)")
 			do {
 				try await hueChar.writeValue(hue)
 				try await saturationChar.writeValue(saturation)
 				try await brightnessChar.writeValue(brightness)
+				try await powerChar.writeValue(power)
 			} catch {
 				print("Error updating light for \(thermostat.id): \(error)")
 			}
@@ -280,7 +337,7 @@ extension HMAccessory {
 		}
 	}
 	
-	var colorService: HMService? {
+	var colorBulbService: HMService? {
 		services.first { $0.serviceType == HMServiceTypeLightbulb }
 	}
 }
