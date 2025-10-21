@@ -34,8 +34,7 @@ class DaikinClient {
 			throw URLError(.badServerResponse)
 		}
 		
-		let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-		return tokenResponse
+		return try JSONDecoder().decode(TokenResponse.self, from: data)
 	}
 	
 	func getLocations(accessToken: String) async throws -> [Location] {
@@ -66,13 +65,13 @@ class DaikinClient {
 		return try JSONDecoder().decode(DeviceInfo.self, from: data)
 	}
 	
-	func setMode(mode: Int, accessToken: String, deviceId: String) async throws -> UpdateResponse {
+	func setMode(mode: Int, heatSetpoint: Double, coolSetpoint: Double, accessToken: String, deviceId: String) async throws -> UpdateResponse {
 		let url = URL(string: "\(baseURL)/v1/devices/\(deviceId)/msp")!
 		var request = URLRequest(url: url)
 		request.httpMethod = "PUT"
 		request.allHTTPHeaderFields = getHeaders(accessToken: accessToken)
 		
-		let body = ModeRequest(mode: mode, heatSetpoint: 15.0, coolSetpoint: 27.0)
+		let body = ModeRequest(mode: mode, heatSetpoint: heatSetpoint, coolSetpoint: coolSetpoint)
 		request.httpBody = try JSONEncoder().encode(body)
 		
 		let (data, response) = try await URLSession.shared.data(for: request)

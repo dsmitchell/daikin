@@ -11,20 +11,20 @@ import SwiftUI
 
 struct ContentView: View {
 	@StateObject private var viewModel = DaikinViewModel()
-	@State private var activeModeIds: Set<String> = []
-	@State private var activeCirculateIds: Set<String> = []
 
 	var body: some View {
 		NavigationStack {
 			List {
 				ForEach(viewModel.locations, id: \.locationName) { location in
 					ForEach(location.devices, id: \.id) { thermostat in
-						Section(header: Text("\(location.locationName ?? "Unnamed Location") - \(thermostat.name ?? "Unnamed Thermostat") - \(thermostat.model) v\(thermostat.firmwareVersion)").textCase(nil)) {
+						Section(header: Text(viewModel.sectionHeader(location: location, thermostat: thermostat)).textCase(nil)) {
 							NavigationLink(destination: ThermostatDetailView(thermostat: thermostat, viewModel: viewModel)) {
 								VStack(alignment: .leading) {
 									Text("Temperature: \(viewModel.getTemperature(for: thermostat.id))")
 										.font(.subheadline)
 									Text("Mode: \(viewModel.getModeDescription(for: thermostat.id))")
+										.font(.subheadline)
+									Text("Running Schedule: \(viewModel.getScheduleDescription(for: thermostat.id))")
 										.font(.subheadline)
 									Text("Active Status: \(viewModel.getActiveStatus(for: thermostat.id))")
 										.font(.subheadline)
@@ -35,43 +35,29 @@ struct ContentView: View {
 								}
 							}
 							Button(action: {
-								activeModeIds.insert(thermostat.id)
-								Task {
-									let newValue = viewModel.getMode(for: thermostat.id) != 3 ? 3 : 0
-									await viewModel.testSetMode(deviceId: thermostat.id, mode: newValue)
-									try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
-									try await viewModel.updateStatus(deviceId: thermostat.id)
-									activeModeIds.remove(thermostat.id)
-								}
+								viewModel.toggleActiveMode(thermostat: thermostat)
 							}) {
 								HStack {
 									Text(viewModel.getMode(for: thermostat.id) != 3 ? "Set Mode Auto" : "Set Mode Off")
-									if activeModeIds.contains(thermostat.id) {
+									if viewModel.activeModeIds.contains(thermostat.id) {
 										ProgressView()
 											.progressViewStyle(CircularProgressViewStyle())
 									}
 								}
 							}
-							.disabled(activeModeIds.contains(thermostat.id))
+							.disabled(viewModel.activeModeIds.contains(thermostat.id))
 							Button(action: {
-								activeCirculateIds.insert(thermostat.id)
-								Task {
-									let newValue = viewModel.getFanCirculate(for: thermostat.id) == 0 ? true : false
-									await viewModel.testSetFanCirculate(deviceId: thermostat.id, circulate: newValue)
-									try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
-									try await viewModel.updateStatus(deviceId: thermostat.id)
-									activeCirculateIds.remove(thermostat.id)
-								}
+								viewModel.toggleCirculate(thermostat: thermostat)
 							}) {
 								HStack {
 									Text(viewModel.getFanCirculate(for: thermostat.id) == 0 ? "Set Fan Circulate On" : "Set Fan Circulate Off")
-									if activeCirculateIds.contains(thermostat.id) {
+									if viewModel.activeCirculateIds.contains(thermostat.id) {
 										ProgressView()
 											.progressViewStyle(CircularProgressViewStyle())
 									}
 								}
 							}
-							.disabled(activeCirculateIds.contains(thermostat.id))
+							.disabled(viewModel.activeCirculateIds.contains(thermostat.id))
 						}
 					}
 				}
@@ -100,6 +86,8 @@ struct ContentView: View {
 					}
 					if viewModel.statuses.isEmpty {
 						await viewModel.loadThermostats()
+					} else {
+						await viewModel.updateStatuses()
 					}
 				}
 			}
@@ -124,7 +112,9 @@ struct ThermostatDetailView: View {
 			ProgressView("Loading Association...")
 				.navigationTitle("Associate Light")
 				.task {
-					await viewModel.refreshHomes()
+					if viewModel.homes.isEmpty {
+						await viewModel.refreshHomes()
+					}
 					homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
 					if let (homeUUID, roomUUID, lightUUID) = viewModel.getAssociatedUUIDs(for: thermostat.id) {
 						selectedHome = viewModel.homes.first { $0.uniqueIdentifier.uuidString == homeUUID }
