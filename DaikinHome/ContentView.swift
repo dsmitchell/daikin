@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ContentView: View {
 	@StateObject private var viewModel = DaikinViewModel()
+	@Environment(\.modelContext) private var modelContext
 
 	var body: some View {
 		NavigationStack {
@@ -80,6 +81,7 @@ struct ContentView: View {
 				}
 			}
 			.onAppear {
+				viewModel.applyModelContext(modelContext: modelContext)
 				Task {
 					if viewModel.homes.isEmpty {
 						await viewModel.refreshHomes()
@@ -117,11 +119,11 @@ struct ThermostatDetailView: View {
 					}
 					homeKitError = viewModel.homes.isEmpty ? "No homes available. Ensure Home app is set up and HomeKit access is granted." : nil
 					if let (homeUUID, roomUUID, lightUUID) = viewModel.getAssociatedUUIDs(for: thermostat.id) {
-						selectedHome = viewModel.homes.first { $0.uniqueIdentifier.uuidString == homeUUID }
+						selectedHome = viewModel.homes.first { $0.uniqueIdentifier == homeUUID }
 						rooms = selectedHome?.rooms ?? []
-						selectedRoom = rooms.first { $0.uniqueIdentifier.uuidString == roomUUID }
+						selectedRoom = rooms.first { $0.uniqueIdentifier == roomUUID }
 						lights = selectedRoom?.accessories.filter { $0.isColorLight } ?? []
-						selectedLight = lights.first { $0.uniqueIdentifier.uuidString == lightUUID }
+						selectedLight = lights.first { $0.uniqueIdentifier == lightUUID }
 					}
 					isLoading = false
 				}
