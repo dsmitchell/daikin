@@ -98,4 +98,21 @@ class DaikinClient {
 		
 		return try JSONDecoder().decode(UpdateResponse.self, from: data)
 	}
+	
+	func setScheduleEnabled(accessToken: String, deviceId: String, enabled: Bool) async throws -> UpdateResponse {
+		let url = URL(string: "\(baseURL)/v1/devices/\(deviceId)/schedule")!
+		var request = URLRequest(url: url)
+		request.httpMethod = "PUT"
+		request.allHTTPHeaderFields = getHeaders(accessToken: accessToken)
+		
+		let body = ScheduleRequest(scheduleEnabled: enabled)
+		request.httpBody = try JSONEncoder().encode(body)
+		
+		let (data, response) = try await URLSession.shared.data(for: request)
+		guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+			throw URLError(.badServerResponse)
+		}
+		
+		return try JSONDecoder().decode(UpdateResponse.self, from: data)
+	}
 }

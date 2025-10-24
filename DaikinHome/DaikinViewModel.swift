@@ -32,7 +32,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 	@Published var activeCirculateIds: Set<String> = []
 	
 	private let homeKitManager = HomeKitManager()
-	private let pollIntervalSeconds: TimeInterval = 60
+	private let pollIntervalSeconds: TimeInterval = 120
 	private var timer: Timer?
 	private var client: DaikinClient?
 	private var accessToken: String?
@@ -41,6 +41,9 @@ class DaikinViewModel: ObservableObject, Sendable {
 	private var modelContext: ModelContext? {
 		didSet { validateAssociations() }
 	}
+	private var initialCirculateStatus: [String:Bool] = [:]
+	private var initialModeStatus: [String:Int] = [:]
+	private var initialScheduledStatus: [String:Bool] = [:]
 	
 	var isConfigured: Bool {
 		!email.isEmpty && !apiKey.isEmpty && !integratorToken.isEmpty
@@ -65,22 +68,16 @@ class DaikinViewModel: ObservableObject, Sendable {
 		} else {
 			offline = ""
 		}
-		return "\(location.locationName ?? "Unnamed Location") - \(thermostat.name ?? "Unnamed Thermostat") - \(thermostat.model) v\(thermostat.firmwareVersion)\(offline)"
+		return "\(location.locationName ?? "Unnamed Location") - \(thermostat.displayName) - \(thermostat.model) v\(thermostat.firmwareVersion)\(offline)"
 	}
 	
-	func setThermostatMode(deviceId: String, mode: Int) async {
+	func setThermostatMode(deviceId: String, mode: Int, heatSetpoint: Double, coolSetpoint: Double) async {
 		do {
 			let accessToken = try await getAccessToken()
-			if let setpoints = statuses[deviceId] {
-				let heatSetpoint = setpoints.heatSetpoint ?? setpoints.setpointMinimum.map { Double($0) } ?? 15.0
-				let coolSetpoint = setpoints.coolSetpoint ?? setpoints.setpointMaximum.map { Double($0) } ?? 27.0
-				let response = try await client!.setMode(mode: mode, heatSetpoint: heatSetpoint, coolSetpoint: coolSetpoint, accessToken: accessToken, deviceId: deviceId)
-				print("setThermostatMode: \(response.message)")
-			} else {
-				
-			}
+			let response = try await client!.setMode(mode: mode, heatSetpoint: heatSetpoint, coolSetpoint: coolSetpoint, accessToken: accessToken, deviceId: deviceId)
+			print("setThermostatMode(\(mode)) with temp from \(heatSetpoint) to \(coolSetpoint): \(response.message)")
 		} catch {
-			print("setThermostatMode failed: \(error)")
+			print("setThermostatMode(\(mode)) failed: \(error)")
 		}
 	}
 
@@ -88,12 +85,22 @@ class DaikinViewModel: ObservableObject, Sendable {
 		do {
 			let accessToken = try await getAccessToken()
 			let response = try await client!.setFanCirculate(accessToken: accessToken, deviceId: deviceId, circulate: circulate)
-			print("setThermostatFanCirculate: \(response.message)")
+			print("setThermostatFanCirculate(\(circulate)): \(response.message)")
 		} catch {
-			print("setThermostatFanCirculate failed: \(error)")
+			print("setThermostatFanCirculate(\(circulate)) failed: \(error)")
 		}
 	}
-	
+
+	func setThermostatScheduleEnabled(deviceId: String, enabled: Bool) async {
+		do {
+			let accessToken = try await getAccessToken()
+			let response = try await client!.setScheduleEnabled(accessToken: accessToken, deviceId: deviceId, enabled: enabled)
+			print("setThermostatScheduleEnabled(\(enabled)): \(response.message)")
+		} catch {
+			print("setThermostatScheduleEnabled(\(enabled)) failed: \(error)")
+		}
+	}
+
 	func loadThermostats() async {
 		guard isConfigured else { return }
 		
@@ -105,13 +112,18 @@ class DaikinViewModel: ObservableObject, Sendable {
 		}
 	}
 	
-	func toggleActiveMode(thermostat: Device) {
+	func toggleAutoMode(thermostat: Device) {
 		activeModeIds.insert(thermostat.id)
 		Task {
 			let newValue = getMode(for: thermostat.id) != 3 ? 3 : 0
-			await setThermostatMode(deviceId: thermostat.id, mode: newValue)
+			if let info = statuses[thermostat.id] {
+				await setThermostatMode(deviceId: thermostat.id, mode: newValue, heatSetpoint: info.safeHeatSetpoint, coolSetpoint: info.safeCoolSetpoint)
+			} else {
+				await setThermostatMode(deviceId: thermostat.id, mode: newValue, heatSetpoint: DeviceInfo.comfortZoneMin, coolSetpoint: DeviceInfo.comfortZoneMax)
+			}
 			try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
 			try await updateStatus(device: thermostat)
+			print("Status updated for \(thermostat.displayName) after toggling auto")
 			activeModeIds.remove(thermostat.id)
 		}
 	}
@@ -123,6 +135,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 			await setThermostatFanCirculate(deviceId: thermostat.id, circulate: newValue)
 			try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
 			try await updateStatus(device: thermostat)
+			print("Status updated for \(thermostat.displayName) after toggling circulate")
 			activeCirculateIds.remove(thermostat.id)
 		}
 	}
@@ -134,17 +147,63 @@ class DaikinViewModel: ObservableObject, Sendable {
 	
 	func toggleMonitoring() {
 		if isMonitoring {
+			isMonitoring = false
 			timer?.invalidate()
 			timer = nil
-			Task { await restoreLights() }
-			isMonitoring = false
-		} else {
-			timer = Timer.scheduledTimer(withTimeInterval: pollIntervalSeconds, repeats: true) { [weak self] _ in
-				Task { await self?.updateStatuses() }
-				Task { await self?.updateLights() }
+			Task {
+				await restoreLights()
+				var changed = false
+				for status in statuses {
+					let restoreCirculate = initialCirculateStatus[status.key]
+					let restoreMode = initialModeStatus[status.key]
+					let restoreScheduled = initialScheduledStatus[status.key]
+					
+					if let restoreCirculate = restoreCirculate, restoreCirculate != (status.value.fanCirculate == 1 ? true : false) {
+						await setThermostatFanCirculate(deviceId: status.key, circulate: true)
+						changed = true
+					}
+					if let restoreMode = restoreMode, restoreMode != status.value.mode {
+						await setThermostatMode(deviceId: status.key, mode: restoreMode, heatSetpoint: status.value.safeHeatSetpoint, coolSetpoint: status.value.safeCoolSetpoint)
+						changed = true
+					}
+					if let restoreScheduled = restoreScheduled, restoreScheduled != status.value.scheduleEnabled {
+						await setThermostatScheduleEnabled(deviceId: status.key, enabled: restoreScheduled)
+						changed = true
+					}
+				}
+				if changed {
+					try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
+					await updateStatuses(reason: "restoration")
+				}
 			}
-			timer?.fire()
+		} else {
 			isMonitoring = true
+			Task {
+				var changed = false
+				for status in statuses {
+					initialCirculateStatus[status.key] = status.value.fanCirculate == 1 ? true : false
+					initialModeStatus[status.key] = status.value.mode
+					initialScheduledStatus[status.key] = status.value.scheduleEnabled ?? false
+					if let scheduleEnabled = status.value.scheduleEnabled, scheduleEnabled {
+						await setThermostatScheduleEnabled(deviceId: status.key, enabled: false)
+						changed = true
+					}
+					if status.value.fanCirculate != 1 {
+						await setThermostatFanCirculate(deviceId: status.key, circulate: true)
+						changed = true
+					}
+				}
+				if changed {
+					try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
+					await updateStatuses(reason: "preparation")
+				}
+			}
+			timer = Timer.scheduledTimer(withTimeInterval: pollIntervalSeconds, repeats: true) { [weak self] _ in
+				Task {
+					await self?.updateStatuses()
+				}
+			}
+//			timer?.fire()
 		}
 	}
 	
@@ -167,23 +226,39 @@ class DaikinViewModel: ObservableObject, Sendable {
 	
 	func updateStatus(device: Device) async throws {
 		let accessToken = try await getAccessToken()
-		print("Updating status for \(device.name ?? device.id)...")
 		let info = try await client!.getThermostatInfo(accessToken: accessToken, deviceId: device.id)
 		await MainActor.run {
-			print("Completed status update for \(device.name ?? device.id)")
 			self.statuses[device.id] = info
 		}
 	}
 	
-	func updateStatuses() async {
-		for location in locations {
-			for thermostat in location.devices {
+	func updateStatuses(reason: String? = nil) async {
+		var changed = false
+		for thermostat in locations.flatMap(\.devices) {
+			do {
+				try await updateStatus(device: thermostat)
+				if isMonitoring, await runRules(device: thermostat) {
+					changed = true
+				}
+			} catch {
+				print("Error updating status for \(thermostat.displayName): \(error)")
+			}
+		}
+		if changed {
+			try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
+			for thermostat in locations.flatMap(\.devices) {
 				do {
 					try await updateStatus(device: thermostat)
 				} catch {
-					print("Error updating status for \(thermostat.name ?? thermostat.id): \(error)")
+					print("Error updating status for \(thermostat.displayName): \(error)")
 				}
 			}
+			print("Status updated after changes")
+		} else if let reason = reason {
+			print("Status updated after \(reason)")
+		}
+		if isMonitoring {
+			await updateLights()
 		}
 	}
 	
@@ -373,6 +448,44 @@ class DaikinViewModel: ObservableObject, Sendable {
 		}
 	}
 	
+	private func runRules(device: Device) async -> Bool {
+		guard let info = statuses[device.id] else {
+			print("No status for \(device.displayName)")
+			return false
+		}
+		// First check whether we are in the "comfort zone"
+		let comfortZoneMin = DeviceInfo.comfortZoneMin
+		let comfortZoneMax = DeviceInfo.comfortZoneMax
+		let comfortBuffer = 0.7
+		var changed = false
+		if info.tempIndoor > comfortZoneMin + comfortBuffer, info.tempIndoor < comfortZoneMax - comfortBuffer {
+			if info.mode != 0 {
+				print("\(device.displayName) entered comfort zone...")
+				await setThermostatMode(deviceId: device.id, mode: 0, heatSetpoint: comfortZoneMin, coolSetpoint: comfortZoneMax)
+				changed = true
+			}
+		} else if info.tempIndoor > comfortZoneMin, info.tempIndoor < comfortZoneMax {
+			// We are in a range where fan is ok
+			if info.fanCirculate != 1 {
+				await setThermostatFanCirculate(deviceId: device.id, circulate: true)
+				changed = true
+			}
+			if info.mode != 3 || info.heatSetpoint != comfortZoneMin || info.coolSetpoint != comfortZoneMax {
+				await setThermostatMode(deviceId: device.id, mode: 3, heatSetpoint: comfortZoneMin, coolSetpoint: comfortZoneMax)
+				changed = true
+			}
+			if changed {
+				print("\(device.displayName) circulating fan to remain in comfort zone")
+			}
+		} else if info.mode != 3 {
+			print("\(device.displayName) has left comfort zone...")
+			let delta = comfortBuffer / 2.0
+			await setThermostatMode(deviceId: device.id, mode: 3, heatSetpoint: comfortZoneMin + delta, coolSetpoint: comfortZoneMax - delta)
+			changed = true
+		}
+		return changed
+	}
+	
 	private func updateLights() async {
 		for thermostat in locations.flatMap( \.devices ) {
 			guard let info = statuses[thermostat.id], let light = getAssociatedLight(for: thermostat.id),
@@ -380,7 +493,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 				  let hueChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeHue }),
 				  let saturationChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeSaturation }),
 				  let brightnessChar = light.colorBulbService?.characteristics.first(where: { $0.characteristicType == HMCharacteristicTypeBrightness }) else {
-				print("No light association for \(thermostat.name ?? thermostat.id)")
+				print("No light association for \(thermostat.displayName)")
 				continue
 			}
 			
@@ -398,7 +511,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 				if let pushed = try? await pushOriginalLightState(light: light, power: power, hue: hue, saturation: saturation, brightness: brightness), !pushed {
 					continue
 				}
-				print("Updating light for \(thermostat.name ?? thermostat.id): Unknown Magenta")
+				print("Updating light for \(thermostat.displayName): Unknown Magenta")
 			} else if equipmentStatus == 3 {
 				power = true
 				hue = 0 // Red for heating
@@ -407,7 +520,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 				if let pushed = try? await pushOriginalLightState(light: light, power: power, hue: hue, saturation: saturation, brightness: brightness), !pushed {
 					continue
 				}
-				print("Updating light for \(thermostat.name ?? thermostat.id): Heating Red")
+				print("Updating light for \(thermostat.displayName): Heating Red")
 			} else if equipmentStatus == 1 || equipmentStatus == 2 {
 				power = true
 				hue = 240 // Blue for cooling / overcooling
@@ -416,7 +529,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 				if let pushed = try? await pushOriginalLightState(light: light, power: power, hue: hue, saturation: saturation, brightness: brightness), !pushed {
 					continue
 				}
-				print("Updating light for \(thermostat.name ?? thermostat.id): Cooling Blue")
+				print("Updating light for \(thermostat.displayName): Cooling Blue")
 			} else if let original = originalLightStates[light.uniqueIdentifier] {
 				await MainActor.run {
 					self.appLightStates.removeValue(forKey: light.uniqueIdentifier)
@@ -426,7 +539,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 				hue = original.hue
 				saturation = original.saturation
 				brightness = original.brightness
-				print("Restoring light for \(thermostat.name ?? thermostat.id) to original: \(power),\(hue),\(saturation),\(brightness)")
+				print("Restoring light for \(thermostat.displayName) to original: \(power),\(hue),\(saturation),\(brightness)")
 			} else {
 				continue
 			}
@@ -448,9 +561,31 @@ class DaikinViewModel: ObservableObject, Sendable {
 					try await powerChar.writeValue(power)
 				}
 			} catch {
-				print("Error updating light for \(thermostat.name ?? thermostat.id): \(error)")
+				print("Error updating light for \(thermostat.displayName): \(error)")
 			}
 		}
+	}
+}
+
+extension Device {
+	
+	var displayName: String {
+		return name ?? id
+	}
+}
+
+extension DeviceInfo {
+	
+	static let comfortZoneMax: Double = 24.0
+	
+	static let comfortZoneMin: Double = 19.0
+	
+	var safeCoolSetpoint: Double {
+		return coolSetpoint ?? setpointMaximum.map { Double($0) } ?? DeviceInfo.comfortZoneMax
+	}
+
+	var safeHeatSetpoint: Double {
+		return heatSetpoint ?? setpointMinimum.map { Double($0) } ?? DeviceInfo.comfortZoneMin
 	}
 }
 

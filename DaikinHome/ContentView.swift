@@ -36,7 +36,7 @@ struct ContentView: View {
 								}
 							}
 							Button(action: {
-								viewModel.toggleActiveMode(thermostat: thermostat)
+								viewModel.toggleAutoMode(thermostat: thermostat)
 							}) {
 								HStack {
 									Text(viewModel.getMode(for: thermostat.id) != 3 ? "Set Mode Auto" : "Set Mode Off")
@@ -72,7 +72,7 @@ struct ContentView: View {
 					Text(viewModel.isConfigured ? "Monitoring" : "Configure in Settings to Start")
 				}
 			}
-			.navigationTitle("Daikin Thermostats")
+			.navigationTitle("Thermostats")
 			.toolbar {
 				ToolbarItem(placement: .navigationBarTrailing) {
 					NavigationLink("Settings") {

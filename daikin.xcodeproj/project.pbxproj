@@ -11,17 +11,17 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		268589572EA4258000F739BF /* DaikinHome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DaikinHome.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		268589572EA4258000F739BF /* WTF Daikin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "WTF Daikin.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2685896D2EA4286F00F739BF /* HomeKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HomeKit.framework; path = System/Library/Frameworks/HomeKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		260756002EA7098C00ADB6FA /* Exceptions for "DaikinHome" folder in "DaikinHome" target */ = {
+		260756002EA7098C00ADB6FA /* Exceptions for "DaikinHome" folder in "Daikin" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 268589562EA4258000F739BF /* DaikinHome */;
+			target = 268589562EA4258000F739BF /* Daikin */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -29,7 +29,7 @@
 		268589582EA4258000F739BF /* DaikinHome */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				260756002EA7098C00ADB6FA /* Exceptions for "DaikinHome" folder in "DaikinHome" target */,
+				260756002EA7098C00ADB6FA /* Exceptions for "DaikinHome" folder in "Daikin" target */,
 			);
 			path = DaikinHome;
 			sourceTree = "<group>";
@@ -68,7 +68,7 @@
 		26890F342EA3C8D800908045 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				268589572EA4258000F739BF /* DaikinHome.app */,
+				268589572EA4258000F739BF /* WTF Daikin.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,9 +76,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		268589562EA4258000F739BF /* DaikinHome */ = {
+		268589562EA4258000F739BF /* Daikin */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 268589622EA4258100F739BF /* Build configuration list for PBXNativeTarget "DaikinHome" */;
+			buildConfigurationList = 268589622EA4258100F739BF /* Build configuration list for PBXNativeTarget "Daikin" */;
 			buildPhases = (
 				268589532EA4258000F739BF /* Sources */,
 				268589542EA4258000F739BF /* Frameworks */,
@@ -91,11 +91,11 @@
 			fileSystemSynchronizedGroups = (
 				268589582EA4258000F739BF /* DaikinHome */,
 			);
-			name = DaikinHome;
+			name = Daikin;
 			packageProductDependencies = (
 			);
 			productName = DaikinHome;
-			productReference = 268589572EA4258000F739BF /* DaikinHome.app */;
+			productReference = 268589572EA4258000F739BF /* WTF Daikin.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -127,7 +127,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				268589562EA4258000F739BF /* DaikinHome */,
+				268589562EA4258000F739BF /* Daikin */,
 			);
 		};
 /* End PBXProject section */
@@ -173,7 +173,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.theappstudiollc.DaikinHome;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "WTF $(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -204,7 +204,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.theappstudiollc.DaikinHome;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "WTF $(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -338,7 +338,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		268589622EA4258100F739BF /* Build configuration list for PBXNativeTarget "DaikinHome" */ = {
+		268589622EA4258100F739BF /* Build configuration list for PBXNativeTarget "Daikin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				268589632EA4258100F739BF /* Debug */,

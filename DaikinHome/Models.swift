@@ -55,6 +55,10 @@ struct FanRequest: Codable {
 	let fanCirculateSpeed: Int
 }
 
+struct ScheduleRequest: Codable {
+	let scheduleEnabled: Bool
+}
+
 struct UpdateResponse: Codable {
 	let message: String
 }
