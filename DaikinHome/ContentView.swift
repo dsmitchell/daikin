@@ -31,8 +31,10 @@ struct ContentView: View {
 										.font(.subheadline)
 									Text("Fan Circulate: \(viewModel.getFanCirculateDescription(for: thermostat.id))")
 										.font(.subheadline)
-									Text("Fan: \(viewModel.getFan(for: thermostat.id))")
-										.font(.subheadline)
+									if viewModel.showFan(for: thermostat.id) {
+										Text("Fan: \(viewModel.getFan(for: thermostat.id))")
+											.font(.subheadline)
+									}
 								}
 							}
 							Button(action: {
@@ -63,11 +65,18 @@ struct ContentView: View {
 					}
 				}
 				Section {
-					Button(viewModel.isMonitoring ? "Stop Monitoring" : "Start Monitoring") {
-						viewModel.toggleMonitoring()
+					VStack {
+						Spacer()
+						Text("Last updated: \(viewModel.lastUpdated, style: .time)")
+							.font(.subheadline)
+						Spacer()
+						Button(viewModel.isMonitoring ? "Stop Monitoring" : "Start Monitoring") {
+							viewModel.toggleMonitoring()
+						}
+						.frame(maxWidth: .infinity)
+						.disabled(!viewModel.isConfigured)
+						Spacer()
 					}
-					.frame(maxWidth: .infinity)
-					.disabled(!viewModel.isConfigured)
 				} header: {
 					Text(viewModel.isConfigured ? "Monitoring" : "Configure in Settings to Start")
 				}

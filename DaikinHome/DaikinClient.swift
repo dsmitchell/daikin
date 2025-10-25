@@ -1,6 +1,7 @@
 import Foundation
 
 class DaikinClient {
+	
 	private let baseURL: String
 	private let apiKey: String
 	

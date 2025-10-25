@@ -17,6 +17,7 @@ class DaikinViewModel: ObservableObject, Sendable {
 	@AppStorage("apiKey") var apiKey: String = ""
 	@AppStorage("integratorToken") var integratorToken: String = ""
 	
+	@Published var lastUpdated: Date = Date()
 	@Published var locations: [Location] = []
 	@Published var isMonitoring = false
 	@Published var statuses: [String: DeviceInfo] = [:]
@@ -234,15 +235,20 @@ class DaikinViewModel: ObservableObject, Sendable {
 	
 	func updateStatuses(reason: String? = nil) async {
 		var changed = false
+		var updates = false
 		for thermostat in locations.flatMap(\.devices) {
 			do {
 				try await updateStatus(device: thermostat)
+				updates = true
 				if isMonitoring, await runRules(device: thermostat) {
 					changed = true
 				}
 			} catch {
 				print("Error updating status for \(thermostat.displayName): \(error)")
 			}
+		}
+		if updates {
+			lastUpdated = Date()
 		}
 		if changed {
 			try? await Task.sleep(nanoseconds: 1_000_000_000 * 15)
@@ -260,6 +266,47 @@ class DaikinViewModel: ObservableObject, Sendable {
 		if isMonitoring {
 			await updateLights()
 		}
+	}
+	
+	private func runRules(device: Device) async -> Bool {
+		guard let info = statuses[device.id] else {
+			print("\(Date()) - No status for \(device.displayName)")
+			return false
+		}
+		// First check whether we are in the "comfort zone"
+		let comfortZoneMin = DeviceInfo.comfortZoneMin
+		let comfortZoneMax = DeviceInfo.comfortZoneMax
+		let comfortBuffer = 0.6
+		var changed = false
+		if info.tempIndoor > comfortZoneMin + comfortBuffer, info.tempIndoor < comfortZoneMax - comfortBuffer {
+			if info.mode != 0 {
+				print("\(Date()) - \(device.displayName) entered comfort zone...")
+				await setThermostatMode(deviceId: device.id, mode: 0, heatSetpoint: comfortZoneMin, coolSetpoint: comfortZoneMax)
+				changed = true
+			}
+		} else if info.tempIndoor > comfortZoneMin, info.tempIndoor < comfortZoneMax {
+			// We are in a range where fan is ok
+			if info.fanCirculate != 1 {
+				await setThermostatFanCirculate(deviceId: device.id, circulate: true)
+				changed = true
+			}
+			let delta = comfortBuffer / 2.0
+			if info.mode != 3 || info.heatSetpoint != comfortZoneMin - delta || info.coolSetpoint != comfortZoneMax + delta {
+				await setThermostatMode(deviceId: device.id, mode: 3, heatSetpoint: comfortZoneMin - delta, coolSetpoint: comfortZoneMax + delta)
+				changed = true
+			}
+			if changed {
+				print("\(Date()) - \(device.displayName) circulating fan to remain in comfort zone")
+			}
+		} else {
+			let delta = comfortBuffer / 2.0
+			if info.mode != 3 || info.heatSetpoint != comfortZoneMin + delta || info.coolSetpoint != comfortZoneMax - delta {
+				print("\(Date()) - \(device.displayName) has left comfort zone @ \(info.tempIndoor)°C...")
+				await setThermostatMode(deviceId: device.id, mode: 3, heatSetpoint: comfortZoneMin + delta, coolSetpoint: comfortZoneMax - delta)
+				changed = true
+			}
+		}
+		return changed
 	}
 	
 	func getTemperature(for id: String) -> String {
@@ -298,6 +345,11 @@ class DaikinViewModel: ObservableObject, Sendable {
 	func getFanCirculateDescription(for id: String) -> String {
 		guard let fanCirculate = getFanCirculate(for: id) else { return "N/A" }
 		return "\(fanCirculateDescription(fanCirculate)) (\(fanCirculate))"
+	}
+	
+	func showFan(for id: String) -> Bool {
+		guard let info = statuses[id], let fan = info.fan else { return true }
+		return fan != 0
 	}
 	
 	func getFan(for id: String) -> String {
@@ -448,44 +500,6 @@ class DaikinViewModel: ObservableObject, Sendable {
 		}
 	}
 	
-	private func runRules(device: Device) async -> Bool {
-		guard let info = statuses[device.id] else {
-			print("No status for \(device.displayName)")
-			return false
-		}
-		// First check whether we are in the "comfort zone"
-		let comfortZoneMin = DeviceInfo.comfortZoneMin
-		let comfortZoneMax = DeviceInfo.comfortZoneMax
-		let comfortBuffer = 0.7
-		var changed = false
-		if info.tempIndoor > comfortZoneMin + comfortBuffer, info.tempIndoor < comfortZoneMax - comfortBuffer {
-			if info.mode != 0 {
-				print("\(device.displayName) entered comfort zone...")
-				await setThermostatMode(deviceId: device.id, mode: 0, heatSetpoint: comfortZoneMin, coolSetpoint: comfortZoneMax)
-				changed = true
-			}
-		} else if info.tempIndoor > comfortZoneMin, info.tempIndoor < comfortZoneMax {
-			// We are in a range where fan is ok
-			if info.fanCirculate != 1 {
-				await setThermostatFanCirculate(deviceId: device.id, circulate: true)
-				changed = true
-			}
-			if info.mode != 3 || info.heatSetpoint != comfortZoneMin || info.coolSetpoint != comfortZoneMax {
-				await setThermostatMode(deviceId: device.id, mode: 3, heatSetpoint: comfortZoneMin, coolSetpoint: comfortZoneMax)
-				changed = true
-			}
-			if changed {
-				print("\(device.displayName) circulating fan to remain in comfort zone")
-			}
-		} else if info.mode != 3 {
-			print("\(device.displayName) has left comfort zone...")
-			let delta = comfortBuffer / 2.0
-			await setThermostatMode(deviceId: device.id, mode: 3, heatSetpoint: comfortZoneMin + delta, coolSetpoint: comfortZoneMax - delta)
-			changed = true
-		}
-		return changed
-	}
-	
 	private func updateLights() async {
 		for thermostat in locations.flatMap( \.devices ) {
 			guard let info = statuses[thermostat.id], let light = getAssociatedLight(for: thermostat.id),
@@ -576,9 +590,9 @@ extension Device {
 
 extension DeviceInfo {
 	
-	static let comfortZoneMax: Double = 24.0
+	static let comfortZoneMax: Double = 25.1
 	
-	static let comfortZoneMin: Double = 19.0
+	static let comfortZoneMin: Double = 17.9
 	
 	var safeCoolSetpoint: Double {
 		return coolSetpoint ?? setpointMaximum.map { Double($0) } ?? DeviceInfo.comfortZoneMax
